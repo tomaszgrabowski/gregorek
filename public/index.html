@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Plate Reader</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .upload-section.dragover {
+            background-color: #f0f8ff;
+            border-color: #0078d7;
+        }
+        #preview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 20px;
+            display: none;
+        }
+        #result-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            display: none;
+        }
+        .plate-text {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            letter-spacing: 2px;
+            margin: 15px 0;
+            padding: 10px;
+            background-color: yellow;
+            border: 2px solid #333;
+            border-radius: 5px;
+        }
+        .plate-image {
+            max-width: 100%;
+            max-height: 100px;
+            display: block;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+        }
+        button {
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #0078d7;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>License Plate Reader</h1>
+        
+        <div class="upload-section" id="drop-area">
+            <p>Drag & drop an image or click to select</p>
+            <input type="file" id="file-input" accept="image/*" style="display: none;">
+            <button id="upload-btn">Select Image</button>
+            <img id="preview" alt="Preview">
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing image...</p>
+        </div>
+        
+        <div class="error" id="error-message"></div>
+        
+        <div id="result-container">
+            <h2>Detected License Plate:</h2>
+            <div class="plate-text" id="plate-text"></div>
+            <div>
+                <h3>Plate Image:</h3>
+                <img class="plate-image" id="plate-image" alt="License Plate">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('file-input');
+            const uploadBtn = document.getElementById('upload-btn');
+            const preview = document.getElementById('preview');
+            const loading = document.getElementById('loading');
+            const resultContainer = document.getElementById('result-container');
+            const plateText = document.getElementById('plate-text');
+            const plateImage = document.getElementById('plate-image');
+            const errorMessage = document.getElementById('error-message');
+            
+            // Handle file selection button
+            uploadBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // Handle file selection
+            fileInput.addEventListener('change', handleFiles);
+            
+            // Handle drag and drop
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            function highlight() {
+                dropArea.classList.add('dragover');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('dragover');
+            }
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleFiles({ target: { files } });
+            }
+            
+            function handleFiles(e) {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    const file = files[0];
+                    
+                    // Display preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    }
+                    reader.readAsDataURL(file);
+                    
+                    // Reset previous results
+                    resultContainer.style.display = 'none';
+                    errorMessage.style.display = 'none';
+                    
+                    // Upload and process the image
+                    uploadImage(file);
+                }
+            }
+            
+            function uploadImage(file) {
+                const formData = new FormData();
+                formData.append('image', file);
+                
+                // Show loading
+                loading.style.display = 'block';
+                
+                fetch('/api/read-plate', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Failed to process image');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide loading
+                    loading.style.display = 'none';
+                    
+                    // Display results
+                    plateText.textContent = data.plateText || 'No text detected';
+                    plateImage.src = `data:image/jpeg;base64,${data.plateImage}`;
+                    resultContainer.style.display = 'block';
+                })
+                .catch(error => {
+                    // Hide loading
+                    loading.style.display = 'none';
+                    
+                    // Show error
+                    errorMessage.textContent = error.message;
+                    errorMessage.style.display = 'block';
+                });
+            }
+        });
+    </script>
+</body>
+</html> 
